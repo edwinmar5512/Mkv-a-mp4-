@@ -1,10 +1,17 @@
 import os
 import time
+import logging
 import asyncio
 import subprocess
 from aiohttp import web
 from pyrogram import Client, filters
 from pyrogram.types import Message
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("mkv_bot")
 
 # ---------- Config (variables de entorno en Render) ----------
 API_ID = int(os.environ["API_ID"])
@@ -21,6 +28,15 @@ app = Client(
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
 )
+
+
+# ---------- DEBUG: loguear absolutamente todo lo que llega ----------
+@app.on_message(filters.all, group=-1)
+async def debug_all(client, message: Message):
+    logger.info(
+        f"UPDATE RECIBIDO -> from={message.from_user.id if message.from_user else '?'} "
+        f"chat={message.chat.id} text={message.text!r} doc={bool(message.document)}"
+    )
 
 
 # ---------- Utilidades de progreso ----------
@@ -55,7 +71,6 @@ async def progress_bar(current, total, message: Message, prefix: str, start_time
     )
 
     try:
-        # Evitar floodear la API editando muy seguido
         last = getattr(progress_bar, f"_last_{message.id}", 0)
         if now - last > 2 or current == total:
             await message.edit_text(text)
@@ -126,6 +141,7 @@ async def convert_with_progress(input_path: str, output_path: str, status_msg: M
 # ---------- Handlers ----------
 @app.on_message(filters.command("start"))
 async def start_handler(client, message: Message):
+    logger.info("Handler /start disparado")
     await message.reply_text(
         "¡Hola! Mandame un archivo .mkv y te lo devuelvo convertido a .mp4."
     )
@@ -172,6 +188,7 @@ async def handle_document(client, message: Message):
         await status_msg.delete()
 
     except Exception as e:
+        logger.exception("Error procesando documento")
         await status_msg.edit_text(f"❌ Error: {e}")
 
     finally:
@@ -196,9 +213,11 @@ async def start_web_server():
 
 async def main():
     await start_web_server()
+    logger.info("Servidor web arrancado, iniciando cliente de Pyrogram...")
     await app.start()
-    print("Bot corriendo...")
-    await asyncio.Event().wait()  # mantener vivo
+    me = await app.get_me()
+    logger.info(f"Bot corriendo... conectado como @{me.username} (id={me.id})")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
