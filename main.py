@@ -3,6 +3,7 @@ import time
 import logging
 import asyncio
 import subprocess
+import aiohttp
 from aiohttp import web
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -197,14 +198,32 @@ async def handle_document(client, message: Message):
                 os.remove(f)
 
 
-# ---------- Servidor HTTP dummy (para que Render no mate el servicio) ----------
+# ---------- Servidor HTTP (health check + debug) ----------
 async def health(request):
     return web.Response(text="OK")
+
+
+async def webhook_info(request):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getWebhookInfo"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            data = await resp.json()
+    return web.json_response(data)
+
+
+async def getme_info(request):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getMe"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            data = await resp.json()
+    return web.json_response(data)
 
 
 async def start_web_server():
     web_app = web.Application()
     web_app.router.add_get("/", health)
+    web_app.router.add_get("/debug/webhook", webhook_info)
+    web_app.router.add_get("/debug/getme", getme_info)
     runner = web.AppRunner(web_app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
